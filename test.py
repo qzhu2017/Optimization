@@ -27,34 +27,42 @@ def single_optimize(pos, dim=3, kt=0.5, mu=0.1, beta=1.001, method='CG'):
         pos = pos[:, :dim]
 
     pos = pos.flatten()
+    res = _minimize_tpgd(LJ, pos, args=(dim, mu), jac=LJ_force, gtol=1e-4, maxiter=20)
+    pos = res.x
     if method == 'mycg':
-        res = _minimize_cg(LJ, pos, args=(dim, mu), jac=LJ_force, gtol=1e-4)
+        res = _minimize_cg(LJ, pos, args=(dim, mu), jac=LJ_force, gtol=1e-4, maxiter=500)
+        res = _minimize_cg(LJ, res.x, args=(dim, mu), jac=LJ_force, gtol=1e-4, maxiter=500)
+        res = _minimize_cg(LJ, res.x, args=(dim, mu), jac=LJ_force, gtol=1e-4)
     elif method== 'mybfgs':
-        res = _minimize_bfgs(LJ, pos, args=(dim, mu), jac=LJ_force, gtol=1e-4)
+        res = _minimize_bfgs(LJ, pos, args=(dim, mu), jac=LJ_force, gtol=1e-4, maxiter=500)
+        res = _minimize_bfgs(LJ, res.x, args=(dim, mu), jac=LJ_force, gtol=1e-4, maxiter=500)
+        res = _minimize_bfgs(LJ, res.x, args=(dim, mu), jac=LJ_force, gtol=1e-4)
     elif method == 'mytpgd':
-        res = _minimize_tpgd(LJ, pos, args=(dim, mu), jac=LJ_force, gtol=1e-4)
+        res = _minimize_tpgd(LJ, pos, args=(dim, mu), jac=LJ_force, gtol=1e-4, maxiter=500)
+        res = _minimize_tpgd(LJ, res.x, args=(dim, mu), jac=LJ_force, gtol=1e-4, maxiter=500)
+        res = _minimize_tpgd(LJ, res.x, args=(dim, mu), jac=LJ_force, gtol=1e-4)
     else:
         res = minimize(LJ, pos, args=(dim, mu), jac=LJ_force, method=method, tol=1e-4)
     energy = res.fun
     pos = np.reshape(res.x, (N_atom, dim))
-    return energy, pos
+    return energy, pos, res.nit
 
 def one_step(pos):
     eng = []
     for method in ['mycg', 'mybfgs', 'mytpgd']:
         pos1 = pos.copy()
-        energy1, pos1 = single_optimize(pos1, dim=3, method=method)
+        energy1, pos1, it1 = single_optimize(pos1, dim=3, method=method)
         pos2 = pos.copy()
-        energy2, pos2 = single_optimize(pos2, dim=4, mu=10, kt=0, method=method)
-        energy2, pos2 = single_optimize(pos2, dim=3, method=method)
-        print('Optmization {:10s}  3D: {:10.4f}  4D: {:10.4f}'.format(method, energy1, energy2))
+        energy2, pos2, it2 = single_optimize(pos2, dim=4, mu=10, kt=1, method=method)
+        energy2, pos2, it2 = single_optimize(pos2, dim=3, method=method)
+        print('Optmization {:10s}  3D: {:10.4f}  {:6d} 4D: {:10.4f} {:6d}'.format(method, energy1, it1, energy2, it2))
         eng.append([energy1, energy2])
     eng = np.array(eng)
     return eng.flatten()
 
 if __name__ == "__main__":
     #np.random.seed(10)
-    N = 5000
+    N = 10000
     clusters = []
     for i in range(N):
         pos = np.loadtxt('data/LJ-38.txt')
@@ -128,7 +136,9 @@ if __name__ == "__main__":
     ax4=fig.add_subplot(gs[0,1]) 
     ax5=fig.add_subplot(gs[1,1]) 
     ax6=fig.add_subplot(gs[2,1]) 
-    
+    x = np.linspace(eng_min, eng_min+20, 10)
+
+    ax4.plot(x, x, 'k-', lw=1)
     ax4.scatter(eng_cg3, eng_cg4, label='CG', s=5)
     ax4.set_xlabel('3D optimization (eV)')
     ax4.set_ylabel('4D optimization (eV)')
@@ -136,6 +146,7 @@ if __name__ == "__main__":
     ax4.set_ylim([eng_min-0.1, eng_min+20])
     ax4.legend()
 
+    ax5.plot(x, x, 'k-', lw=1)
     ax5.scatter(eng_bf3, eng_bf4, label='BFGS', s=5)
     ax5.set_xlabel('3D optimization (eV)')
     ax5.set_ylabel('4D optimization (eV)')
@@ -144,6 +155,7 @@ if __name__ == "__main__":
     ax5.legend()
 
     ax6.scatter(eng_gd3, eng_gd4, label='TPGD', s=5)
+    ax6.plot(x, x, 'k-', lw=1)
     ax6.set_xlabel('3D optimization (eV)')
     ax6.set_ylabel('4D optimization (eV)')
     ax6.set_xlim([eng_min-0.1, eng_min+20])
